@@ -49,6 +49,8 @@
 #include "g2o/core/base_vertex.h"
 #include "g2o/core/hyper_graph_action.h"
 
+#include "ros/console.h"
+
 #include <Eigen/Core>
 
 namespace teb_local_planner
@@ -57,6 +59,8 @@ namespace teb_local_planner
 /**
   * @class VertexTimeDiff
   * @brief This class stores and wraps a time difference \f$ \Delta T \f$ into a vertex that can be optimized via g2o
+  * @see VertexPointXY
+  * @see VertexOrientation
   */
 class VertexTimeDiff : public g2o::BaseVertex<1, double>
 {
@@ -84,23 +88,29 @@ public:
   }
 
   /**
+    * @brief Destructs the VertexTimeDiff
+    */ 
+  ~VertexTimeDiff()
+  {}
+
+  /**
     * @brief Access the timediff value of the vertex
     * @see estimate
     * @return reference to dt
     */ 
-  inline double& dt() {return _estimate;}
+  double& dt() {return _estimate;}
   
   /**
     * @brief Access the timediff value of the vertex (read-only)
     * @see estimate
     * @return const reference to dt
     */ 
-  inline const double& dt() const {return _estimate;}
+  const double& dt() const {return _estimate;}
   
   /**
     * @brief Set the underlying TimeDiff estimate \f$ \Delta T \f$ to default.
     */ 
-  virtual void setToOriginImpl() override
+  virtual void setToOriginImpl()
   {
     _estimate = 0.1;
   }
@@ -110,7 +120,7 @@ public:
     * A simple addition implements what we want.
     * @param update increment that should be added to the previous esimate
     */ 
-  virtual void oplusImpl(const double* update) override
+  virtual void oplusImpl(const double* update)
   {
       _estimate += *update;
   }
@@ -120,7 +130,7 @@ public:
     * @param is input stream
     * @return always \c true
     */ 
-  virtual bool read(std::istream& is) override
+  virtual bool read(std::istream& is)
   {
     is >> _estimate;
     return true;
@@ -131,7 +141,7 @@ public:
     * @param os output stream
     * @return \c true if the export was successful, otherwise \c false
     */ 
-  virtual bool write(std::ostream& os) const override
+  virtual bool write(std::ostream& os) const
   {
     os << estimate();
     return os.good();

@@ -147,7 +147,7 @@ int main( int argc, char** argv )
   visual = TebVisualizationPtr(new TebVisualization(n, config));
   
   // Setup robot shape model
-  RobotFootprintModelPtr robot_model = TebLocalPlannerROS::getRobotFootprintFromParamServer(n, config);
+  RobotFootprintModelPtr robot_model = TebLocalPlannerROS::getRobotFootprintFromParamServer(n);
   
   // Setup planner (homotopy class planning or just the local teb planner)
   if (config.hcp.enable_homotopy_class_planning)
@@ -268,11 +268,6 @@ void CB_customObstacle(const costmap_converter::ObstacleArrayMsg::ConstPtr& obst
                                                             obst_msg->obstacles.at(i).polygon.points.front().y,
                                                             obst_msg->obstacles.at(i).radius )));
       }
-    }
-    else if (obst_msg->obstacles.at(i).polygon.points.empty())
-    {
-      ROS_WARN("Invalid custom obstacle received. List of polygon vertices is empty. Skipping...");
-      continue;
     }
     else
     {

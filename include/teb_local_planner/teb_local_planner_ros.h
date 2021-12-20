@@ -193,10 +193,9 @@ public:
   /**
    * @brief Get the current robot footprint/contour model
    * @param nh const reference to the local ros::NodeHandle
-   * @param config const reference to the current configuration
    * @return Robot footprint model used for optimization
    */
-  static RobotFootprintModelPtr getRobotFootprintFromParamServer(const ros::NodeHandle& nh, const TebConfig& config);
+  static RobotFootprintModelPtr getRobotFootprintFromParamServer(const ros::NodeHandle& nh);
   
   /** 
    * @brief Set the footprint from the given XmlRpcValue.
@@ -440,7 +439,6 @@ private:
   
   std::string global_frame_; //!< The frame in which the controller will run
   std::string robot_base_frame_; //!< Used as the base frame id of the robot
-  std::string name_; //!< For use with the ros nodehandle
     
   // flags
   bool initialized_; //!< Keeps track about the correct initialization of this class

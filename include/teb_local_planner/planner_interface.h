@@ -48,7 +48,6 @@
 
 // this package
 #include <teb_local_planner/pose_se2.h>
-#include <teb_local_planner/robot_footprint_model.h>
 
 // messages
 #include <geometry_msgs/PoseArray.h>
@@ -161,10 +160,6 @@ public:
   {
   }
   
-  virtual void updateRobotModel(RobotFootprintModelPtr robot_model)
-  {
-  }
-
   /**
    * @brief Check whether the planned trajectory is feasible or not.
    * 
@@ -179,7 +174,7 @@ public:
    *         any obstacle in the costmap, \c false otherwise.
    */
   virtual bool isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
-        double inscribed_radius = 0.0, double circumscribed_radius=0.0, int look_ahead_idx=-1) = 0;
+        double inscribed_radius = 0.0, double circumscribed_radius=0.0, int look_ahead_idx=-1, double feasibility_check_lookahead_distance=-1.0) = 0;
     
   /**
    * Compute and return the cost of the current optimization graph (supports multiple trajectories)
@@ -190,12 +185,7 @@ public:
    */
   virtual void computeCurrentCost(std::vector<double>& cost, double obst_cost_scale=1.0, bool alternative_time_cost=false)
   {
-  }
-
-  /**
-   * @brief Returns true if the planner has diverged.
-   */
-  virtual bool hasDiverged() const = 0;
+  }      
                 
 };
 

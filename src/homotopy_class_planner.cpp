@@ -78,10 +78,6 @@ void HomotopyClassPlanner::initialize(const TebConfig& cfg, ObstContainer* obsta
   setVisualization(visual);
 }
 
-void HomotopyClassPlanner::updateRobotModel(RobotFootprintModelPtr robot_model )
-{
-  robot_model_ = robot_model;
-}
 
 void HomotopyClassPlanner::setVisualization(TebVisualizationPtr visualization)
 {
@@ -120,7 +116,7 @@ bool HomotopyClassPlanner::plan(const PoseSE2& start, const PoseSE2& goal, const
   updateAllTEBs(&start, &goal, start_vel);
 
   // Init new TEBs based on newly explored homotopy classes
-  exploreEquivalenceClassesAndInitTebs(start, goal, cfg_->obstacles.min_obstacle_dist, start_vel, free_goal_vel);
+  exploreEquivalenceClassesAndInitTebs(start, goal, cfg_->obstacles.min_obstacle_dist, start_vel);
   // update via-points if activated
   updateReferenceTrajectoryViaPoints(cfg_->hcp.viapoints_all_candidates);
   // Optimize all trajectories in alternative homotopy classes
@@ -342,7 +338,7 @@ void HomotopyClassPlanner::updateReferenceTrajectoryViaPoints(bool all_trajector
 }
 
 
-void HomotopyClassPlanner::exploreEquivalenceClassesAndInitTebs(const PoseSE2& start, const PoseSE2& goal, double dist_to_obst, const geometry_msgs::Twist* start_vel, bool free_goal_vel)
+void HomotopyClassPlanner::exploreEquivalenceClassesAndInitTebs(const PoseSE2& start, const PoseSE2& goal, double dist_to_obst, const geometry_msgs::Twist* start_vel)
 {
   // first process old trajectories
   renewAndAnalyzeOldTebs(cfg_->hcp.delete_detours_backwards);
@@ -351,7 +347,7 @@ void HomotopyClassPlanner::exploreEquivalenceClassesAndInitTebs(const PoseSE2& s
   // inject initial plan if available and not yet captured
   if (initial_plan_)
   {
-    initial_plan_teb_ = addAndInitNewTeb(*initial_plan_, start_vel, free_goal_vel);
+    initial_plan_teb_ = addAndInitNewTeb(*initial_plan_, start_vel);
   }
   else
   {
@@ -360,11 +356,11 @@ void HomotopyClassPlanner::exploreEquivalenceClassesAndInitTebs(const PoseSE2& s
   }
 
   // now explore new homotopy classes and initialize tebs if new ones are found. The appropriate createGraph method is chosen via polymorphism.
-  graph_search_->createGraph(start,goal,dist_to_obst,cfg_->hcp.obstacle_heading_threshold, start_vel, free_goal_vel);
+  graph_search_->createGraph(start,goal,dist_to_obst,cfg_->hcp.obstacle_heading_threshold, start_vel);
 }
 
 
-TebOptimalPlannerPtr HomotopyClassPlanner::addAndInitNewTeb(const PoseSE2& start, const PoseSE2& goal, const geometry_msgs::Twist* start_velocity, bool free_goal_vel)
+TebOptimalPlannerPtr HomotopyClassPlanner::addAndInitNewTeb(const PoseSE2& start, const PoseSE2& goal, const geometry_msgs::Twist* start_velocity)
 {
   if(tebs_.size() >= cfg_->hcp.max_number_classes)
     return TebOptimalPlannerPtr();
@@ -377,9 +373,6 @@ TebOptimalPlannerPtr HomotopyClassPlanner::addAndInitNewTeb(const PoseSE2& start
 
   EquivalenceClassPtr H = calculateEquivalenceClass(candidate->teb().poses().begin(), candidate->teb().poses().end(), getCplxFromVertexPosePtr, obstacles_,
                                                     candidate->teb().timediffs().begin(), candidate->teb().timediffs().end());
-
-  if (free_goal_vel)
-    candidate->setVelocityGoalFree(); 
 
   if(addEquivalenceClassIfNew(H))
   {
@@ -419,7 +412,7 @@ int HomotopyClassPlanner::numTebsInBestTebClass() const
   return count;
 }
 
-TebOptimalPlannerPtr HomotopyClassPlanner::addAndInitNewTeb(const std::vector<geometry_msgs::PoseStamped>& initial_plan, const geometry_msgs::Twist* start_velocity, bool free_goal_vel)
+TebOptimalPlannerPtr HomotopyClassPlanner::addAndInitNewTeb(const std::vector<geometry_msgs::PoseStamped>& initial_plan, const geometry_msgs::Twist* start_velocity)
 {
   if(tebs_.size() >= cfg_->hcp.max_number_classes)
     return TebOptimalPlannerPtr();
@@ -430,9 +423,6 @@ TebOptimalPlannerPtr HomotopyClassPlanner::addAndInitNewTeb(const std::vector<ge
 
   if (start_velocity)
     candidate->setVelocityStart(*start_velocity);
-
-  if (free_goal_vel)
-    candidate->setVelocityGoalFree();
 
   // store the h signature of the initial plan to enable searching a matching teb later.
   initial_plan_eq_class_ = calculateEquivalenceClass(candidate->teb().poses().begin(), candidate->teb().poses().end(), getCplxFromVertexPosePtr, obstacles_,
@@ -692,7 +682,7 @@ int HomotopyClassPlanner::bestTebIdx() const
 }
 
 bool HomotopyClassPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec,
-                                                double inscribed_radius, double circumscribed_radius, int look_ahead_idx)
+                                                double inscribed_radius, double circumscribed_radius, int look_ahead_idx, double feasibility_check_lookahead_distance)
 {
   bool feasible = false;
   while(ros::ok() && !feasible && tebs_.size() > 0)
@@ -703,7 +693,7 @@ bool HomotopyClassPlanner::isTrajectoryFeasible(base_local_planner::CostmapModel
       ROS_ERROR("Couldn't retrieve the best plan");
       return false;
     }
-    feasible = best->isTrajectoryFeasible(costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, look_ahead_idx);
+    feasible = best->isTrajectoryFeasible(costmap_model, footprint_spec, inscribed_radius, circumscribed_radius, look_ahead_idx, feasibility_check_lookahead_distance);
     if(!feasible)
     {
       removeTeb(best);
@@ -752,15 +742,6 @@ void HomotopyClassPlanner::setPreferredTurningDir(RotType dir)
   {
     (*it_teb)->setPreferredTurningDir(dir);
   }
-}
-
-bool HomotopyClassPlanner::hasDiverged() const
-{
-  // Early return if there is no best trajectory initialized
-  if (!best_teb_)
-    return false;
-
-  return best_teb_->hasDiverged();
 }
 
 void HomotopyClassPlanner::computeCurrentCost(std::vector<double>& cost, double obst_cost_scale, double viapoint_cost_scale, bool alternative_time_cost)

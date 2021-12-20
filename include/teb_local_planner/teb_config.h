@@ -82,11 +82,11 @@ public:
     bool exact_arc_length; //!< If true, the planner uses the exact arc length in velocity, acceleration and turning rate computations [-> increased cpu time], otherwise the euclidean approximation is used.
     double force_reinit_new_goal_dist; //!< Reinitialize the trajectory if a previous goal is updated with a seperation of more than the specified value in meters (skip hot-starting)
     double force_reinit_new_goal_angular; //!< Reinitialize the trajectory if a previous goal is updated with an angular difference of more than the specified value in radians (skip hot-starting)
-    int feasibility_check_no_poses; //!< Specify up to which pose on the predicted plan the feasibility should be checked each sampling interval.
+    int feasibility_check_no_poses; //!< Specify up to which pose (under the feasibility_check_lookahead_distance) on the predicted plan the feasibility should be checked each sampling interval; if -1, all poses up to feasibility_check_lookahead_distance are checked.
+    double feasibility_check_lookahead_distance; //!< Specify up to which distance (and with an index below feasibility_check_no_poses) from the robot the feasibility should be checked each sampling interval; if -1, all poses up to feasibility_check_no_poses are checked.
     bool publish_feedback; //!< Publish planner feedback containing the full trajectory and a list of active obstacles (should be enabled only for evaluation or debugging purposes)
     double min_resolution_collision_check_angular; //! Min angular resolution used during the costmap collision check. If not respected, intermediate samples are added. [rad]
     int control_look_ahead_poses; //! Index of the pose used to extract the velocity command
-    int prevent_look_ahead_poses_near_goal; //! Prevents control_look_ahead_poses to look within this many poses of the goal in order to prevent overshoot & oscillation when xy_goal_tolerance is very small
   } trajectory; //!< Trajectory related parameters
 
   //! Robot related parameters
@@ -113,8 +113,6 @@ public:
     double yaw_goal_tolerance; //!< Allowed final orientation error
     double xy_goal_tolerance; //!< Allowed final euclidean distance to the goal position
     bool free_goal_vel; //!< Allow the robot's velocity to be nonzero (usally max_vel) for planning purposes
-    double trans_stopped_vel; //!< Below what maximum velocity we consider the robot to be stopped in translation
-    double theta_stopped_vel; //!< Below what maximum rotation velocity we consider the robot to be stopped in rotation
     bool complete_global_plan; // true prevents the robot from ending the path early when it cross the end goal
   } goal_tolerance; //!< Goal tolerance related parameters
 
@@ -219,8 +217,6 @@ public:
     double oscillation_omega_eps; //!< Threshold for the average normalized angular velocity: if oscillation_v_eps and oscillation_omega_eps are not exceeded both, a possible oscillation is detected
     double oscillation_recovery_min_duration; //!< Minumum duration [sec] for which the recovery mode is activated after an oscillation is detected.
     double oscillation_filter_duration; //!< Filter length/duration [sec] for the detection of oscillations
-    bool divergence_detection_enable; //!< True to enable divergence detection.
-    int divergence_detection_max_chi_squared; //!< Maximum acceptable Mahalanobis distance above which it is assumed that the optimization diverged.
   } recovery; //!< Parameters related to recovery and backup strategies
 
 
@@ -260,11 +256,11 @@ public:
     trajectory.force_reinit_new_goal_dist = 1;
     trajectory.force_reinit_new_goal_angular = 0.5 * M_PI;
     trajectory.feasibility_check_no_poses = 5;
+    trajectory.feasibility_check_lookahead_distance = -1;
     trajectory.publish_feedback = false;
     trajectory.min_resolution_collision_check_angular = M_PI;
     trajectory.control_look_ahead_poses = 1;
-    trajectory.prevent_look_ahead_poses_near_goal = 0;
-
+    
     // Robot
 
     robot.max_vel_x = 0.4;
@@ -285,8 +281,6 @@ public:
     goal_tolerance.xy_goal_tolerance = 0.2;
     goal_tolerance.yaw_goal_tolerance = 0.2;
     goal_tolerance.free_goal_vel = false;
-    goal_tolerance.trans_stopped_vel = 0.1;
-    goal_tolerance.theta_stopped_vel = 0.1;
     goal_tolerance.complete_global_plan = true;
 
     // Obstacles
@@ -314,7 +308,7 @@ public:
     optim.no_outer_iterations = 4;
     optim.optimization_activate = true;
     optim.optimization_verbose = false;
-    optim.penalty_epsilon = 0.1;
+    optim.penalty_epsilon = 0.05;
     optim.weight_max_vel_x = 2; //1
     optim.weight_max_vel_y = 2;
     optim.weight_max_vel_theta = 1;

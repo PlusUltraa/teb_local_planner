@@ -116,7 +116,7 @@ public:
    */
   TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
                     TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
-  
+
   /**
    * @brief Destruct the optimal planner.
    */
@@ -132,12 +132,8 @@ public:
     */
   void initialize(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
                   TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
-  
-  /**
-    * @param robot_model Shared pointer to the robot shape model used for optimization (optional)
-    */
-  void updateRobotModel(RobotFootprintModelPtr robot_model );
-  
+
+
   /** @name Plan a trajectory  */
   //@{
   
@@ -391,11 +387,6 @@ public:
    *         otherwise \c false (also if no optimization has been called before).
    */
   bool isOptimized() const {return optimized_;};
-
-  /**
-   * @brief Returns true if the planner has diverged.
-   */
-  bool hasDiverged() const override;
 	
   /**
    * @brief Compute the cost vector of a given optimization problen (hyper-graph must exist).
@@ -505,7 +496,7 @@ public:
    *         any obstacle in the costmap, \c false otherwise.
    */
   virtual bool isTrajectoryFeasible(base_local_planner::CostmapModel* costmap_model, const std::vector<geometry_msgs::Point>& footprint_spec, double inscribed_radius = 0.0,
-          double circumscribed_radius=0.0, int look_ahead_idx=-1);
+          double circumscribed_radius=0.0, int look_ahead_idx=-1, double feasibility_check_lookahead_distance=-1.0);
   
   //@}
   
@@ -527,7 +518,21 @@ protected:
    * @return \c true, if the graph was created successfully, \c false otherwise.
    */
   bool buildGraph(double weight_multiplier=1.0);
-  
+
+  /**
+   * @brief Build the hyper-graph representing the TEB optimization problem.
+   *
+   * This method creates the optimization problem according to the hyper-graph formulation. \n
+   * For more details refer to the literature cited in the TebOptimalPlanner class description.
+   * @see optimizeGraph
+   * @see clearGraph
+   * @param weight_multiplier Specify a weight multipler for selected weights in optimizeGraph
+   *                          This might be used for weight adapation strategies.
+   *                          Currently, only obstacle collision weights are considered.
+   * @return \c true, if the graph was created successfully, \c false otherwise.
+   */
+  bool buildGraph_temporary(double weight_multiplier=1.0);
+
   /**
    * @brief Optimize the previously constructed hyper-graph to deform / optimize the TEB.
    * 
@@ -606,7 +611,18 @@ protected:
    * @param weight_multiplier Specify an additional weight multipler (in addition to the the config weight)
    */
   void AddEdgesObstacles(double weight_multiplier=1.0);
-  
+
+  /**
+   * @brief Add all edges (local cost functions) related to keeping a distance from static obstacles depending of the robot model
+   * @warning do not combine with AddEdgesInflatedObstacles
+   * @see EdgeObstacle
+   * @see buildGraph
+   * @see optimizeGraph
+   * @param weight_multiplier Specify an additional weight multipler (in addition to the the config weight)
+   * @param model Robor Model used to create the edge
+   */
+  void AddEdgesObstacles_temporary(double weight_multiplier=1.0, teb_local_planner::RobotFootprintModelPtr model=NULL, ObstContainer* obstacles_in_level=NULL);
+
   /**
    * @brief Add all edges (local cost functions) related to keeping a distance from static obstacles (legacy association strategy)
    * @see EdgeObstacle
@@ -683,6 +699,7 @@ protected:
   ObstContainer* obstacles_; //!< Store obstacles that are relevant for planning
   const ViaPointContainer* via_points_; //!< Store via points for planning
   std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices
+  std::vector<ObstContainer> layered_obstacles_;
   
   double cost_; //!< Store cost value of the current hyper-graph
   RotType prefer_rotdir_; //!< Store whether to prefer a specific initial rotation in optimization (might be activated in case the robot oscillates)
@@ -691,6 +708,7 @@ protected:
   TebVisualizationPtr visualization_; //!< Instance of the visualization class
   TimedElasticBand teb_; //!< Actual trajectory object
   RobotFootprintModelPtr robot_model_; //!< Robot model
+  std::vector<RobotFootprintModelPtr> layered_robot_models_;
   boost::shared_ptr<g2o::SparseOptimizer> optimizer_; //!< g2o optimizer for trajectory optimization
   std::pair<bool, geometry_msgs::Twist> vel_start_; //!< Store the initial velocity at the start pose
   std::pair<bool, geometry_msgs::Twist> vel_goal_; //!< Store the final velocity at the goal pose
