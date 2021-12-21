@@ -127,6 +127,10 @@ public:
   HomotopyClassPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
                        TebVisualizationPtr visualization = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
 
+  HomotopyClassPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
+                       RobotFootprintModelPtr other_robot_model = boost::make_shared<PointRobotFootprint>(), TebVisualizationPtr visualization = TebVisualizationPtr(),
+                       const ViaPointContainer* via_points = NULL);
+
   /**
    * @brief Destruct the HomotopyClassPlanner.
    */

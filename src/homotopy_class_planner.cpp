@@ -53,6 +53,13 @@ HomotopyClassPlanner::HomotopyClassPlanner(const TebConfig& cfg, ObstContainer* 
   initialize(cfg, obstacles, robot_model, visual, via_points);
 }
 
+HomotopyClassPlanner::HomotopyClassPlanner(const TebConfig& cfg, ObstContainer* obstacles, RobotFootprintModelPtr robot_model ,RobotFootprintModelPtr other_robot_model,
+                                           TebVisualizationPtr visual, const ViaPointContainer* via_points) : initial_plan_(NULL)
+{
+  upper_model_ = other_robot_model;
+  initialize(cfg, obstacles, robot_model, visual, via_points);
+}
+
 HomotopyClassPlanner::~HomotopyClassPlanner()
 {
 }
