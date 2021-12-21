@@ -531,7 +531,7 @@ protected:
    *                          Currently, only obstacle collision weights are considered.
    * @return \c true, if the graph was created successfully, \c false otherwise.
    */
-  bool buildGraph_temporary(double weight_multiplier=1.0);
+  bool buildGraph_temporary(double weight_multiplier=1.0, RobotFootprintModelPtr model=NULL);
 
   /**
    * @brief Optimize the previously constructed hyper-graph to deform / optimize the TEB.
