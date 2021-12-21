@@ -127,7 +127,8 @@ public:
   HomotopyClassPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
                        TebVisualizationPtr visualization = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
 
-  HomotopyClassPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
+  HomotopyClassPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, ObstContainer* other_obstacles = NULL,
+                       RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
                        RobotFootprintModelPtr other_robot_model = boost::make_shared<PointRobotFootprint>(), TebVisualizationPtr visualization = TebVisualizationPtr(),
                        const ViaPointContainer* via_points = NULL);
 
@@ -544,6 +545,8 @@ protected:
   // external objects (store weak pointers)
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   ObstContainer* obstacles_; //!< Store obstacles that are relevant for planning
+  ObstContainer* upper_obstacles_;
+
   const ViaPointContainer* via_points_; //!< Store the current list of via-points
 
   // internal objects (memory management owned)

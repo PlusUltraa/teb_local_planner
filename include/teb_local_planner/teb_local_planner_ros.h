@@ -39,6 +39,7 @@
 #ifndef TEB_LOCAL_PLANNER_ROS_H_
 #define TEB_LOCAL_PLANNER_ROS_H_
 
+#include "teb_local_planner/obstacles.h"
 #include <ros/ros.h>
 
 // base local planner base class and utilities
@@ -401,6 +402,7 @@ private:
   // internal objects (memory management owned)
   PlannerInterfacePtr planner_; //!< Instance of the underlying optimal planner class
   ObstContainer obstacles_; //!< Obstacle vector that should be considered during local trajectory optimization
+  ObstContainer upper_obstacles_;
   ViaPointContainer via_points_; //!< Container of via-points that should be considered during local trajectory optimization
   TebVisualizationPtr visualization_; //!< Instance of the visualization class (local/global plan, obstacles, ...)
   boost::shared_ptr<base_local_planner::CostmapModel> costmap_model_;  

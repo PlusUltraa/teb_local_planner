@@ -39,6 +39,7 @@
 #ifndef OPTIMAL_PLANNER_H_
 #define OPTIMAL_PLANNER_H_
 
+#include "teb_local_planner/obstacles.h"
 #include <math.h>
 
 
@@ -117,9 +118,9 @@ public:
   TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
                     TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
 
-  TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
-                    RobotFootprintModelPtr other_robot_model = boost::make_shared<PointRobotFootprint>(), TebVisualizationPtr visual = TebVisualizationPtr(),
-                    const ViaPointContainer* via_points = NULL);
+  TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, ObstContainer* other_obstacles = NULL,
+                    RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(), RobotFootprintModelPtr other_robot_model = boost::make_shared<PointRobotFootprint>(),
+                    TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
 
   /**
    * @brief Destruct the optimal planner.
@@ -701,6 +702,8 @@ protected:
   // external objects (store weak pointers)
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   ObstContainer* obstacles_; //!< Store obstacles that are relevant for planning
+  ObstContainer* upper_obstacles_;
+
   const ViaPointContainer* via_points_; //!< Store via points for planning
   std::vector<ObstContainer> obstacles_per_vertex_; //!< Store the obstacles associated with the n-1 initial vertices
   std::vector<ObstContainer> layered_obstacles_;

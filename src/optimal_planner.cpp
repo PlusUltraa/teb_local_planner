@@ -72,9 +72,10 @@ TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstac
   initialize(cfg, obstacles, robot_model, visual, via_points);
 }
 
-TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles, RobotFootprintModelPtr robot_model, RobotFootprintModelPtr other_robot_model,
-                                       TebVisualizationPtr visual, const ViaPointContainer* via_points)
+TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles, ObstContainer* other_obstacles, RobotFootprintModelPtr robot_model,
+                                     RobotFootprintModelPtr other_robot_model, TebVisualizationPtr visual, const ViaPointContainer* via_points)
 {
+  upper_obstacles_ = other_obstacles;
   upper_model_ = other_robot_model;
   initialize(cfg, obstacles, robot_model, visual, via_points);
 }
@@ -391,7 +392,7 @@ bool TebOptimalPlanner::buildGraph_temporary(double weight_multiplier, RobotFoot
     AddEdgesObstaclesLegacy(weight_multiplier);
   else{
     AddEdgesObstacles_temporary(weight_multiplier, model, obstacles_);
-    AddEdgesObstacles_temporary(weight_multiplier, model2, obstacles_);
+    AddEdgesObstacles_temporary(weight_multiplier, model2, upper_obstacles_);
   }
 
   if (cfg_->obstacles.include_dynamic_obstacles)
