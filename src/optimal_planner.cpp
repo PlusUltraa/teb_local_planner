@@ -217,7 +217,7 @@ bool TebOptimalPlanner::optimizeTEB(int iterations_innerloop, int iterations_out
     }
 
     //success = buildGraph(weight_multiplier);
-    success = buildGraph_temporary(weight_multiplier, robot_model_);
+    success = buildGraph_temporary(weight_multiplier, robot_model_, upper_model_);
     if (!success) 
     {
         clearGraph();
@@ -375,7 +375,7 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   return true;  
 }
 
-bool TebOptimalPlanner::buildGraph_temporary(double weight_multiplier, RobotFootprintModelPtr model)
+bool TebOptimalPlanner::buildGraph_temporary(double weight_multiplier, RobotFootprintModelPtr model, RobotFootprintModelPtr model2)
 {
   if (!optimizer_->edges().empty() || !optimizer_->vertices().empty())
   {
@@ -391,6 +391,7 @@ bool TebOptimalPlanner::buildGraph_temporary(double weight_multiplier, RobotFoot
     AddEdgesObstaclesLegacy(weight_multiplier);
   else{
     AddEdgesObstacles_temporary(weight_multiplier, model, obstacles_);
+    AddEdgesObstacles_temporary(weight_multiplier, model2, obstacles_);
   }
 
   if (cfg_->obstacles.include_dynamic_obstacles)
