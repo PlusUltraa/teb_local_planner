@@ -117,6 +117,10 @@ public:
   TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
                     TebVisualizationPtr visual = TebVisualizationPtr(), const ViaPointContainer* via_points = NULL);
 
+  TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles = NULL, RobotFootprintModelPtr robot_model = boost::make_shared<PointRobotFootprint>(),
+                    RobotFootprintModelPtr other_robot_model = boost::make_shared<PointRobotFootprint>(), TebVisualizationPtr visual = TebVisualizationPtr(),
+                    const ViaPointContainer* via_points = NULL);
+
   /**
    * @brief Destruct the optimal planner.
    */
@@ -708,6 +712,8 @@ protected:
   TebVisualizationPtr visualization_; //!< Instance of the visualization class
   TimedElasticBand teb_; //!< Actual trajectory object
   RobotFootprintModelPtr robot_model_; //!< Robot model
+  RobotFootprintModelPtr upper_model_;
+
   std::vector<RobotFootprintModelPtr> layered_robot_models_;
   boost::shared_ptr<g2o::SparseOptimizer> optimizer_; //!< g2o optimizer for trajectory optimization
   std::pair<bool, geometry_msgs::Twist> vel_start_; //!< Store the initial velocity at the start pose

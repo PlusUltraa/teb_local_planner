@@ -547,6 +547,7 @@ protected:
   TebOptimalPlannerPtr best_teb_; //!< Store the current best teb.
   EquivalenceClassPtr best_teb_eq_class_; //!< Store the equivalence class of the current best teb
   RobotFootprintModelPtr robot_model_; //!< Robot model shared instance
+  RobotFootprintModelPtr upper_model_;
 
   const std::vector<geometry_msgs::PoseStamped>* initial_plan_; //!< Store the initial plan if available for a better trajectory initialization
   EquivalenceClassPtr initial_plan_eq_class_; //!< Store the equivalence class of the initial plan

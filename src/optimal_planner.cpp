@@ -72,6 +72,13 @@ TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstac
   initialize(cfg, obstacles, robot_model, visual, via_points);
 }
 
+TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles, RobotFootprintModelPtr robot_model, RobotFootprintModelPtr other_robot_model,
+                                       TebVisualizationPtr visual, const ViaPointContainer* via_points)
+{
+  upper_model_ = other_robot_model;
+  initialize(cfg, obstacles, robot_model, visual, via_points);
+}
+
 TebOptimalPlanner::~TebOptimalPlanner()
 {
   clearGraph();
