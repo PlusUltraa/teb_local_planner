@@ -36,6 +36,7 @@
  * Author: Christoph Rösmann
  *********************************************************************/
 
+#include "teb_local_planner/obstacles.h"
 #include "teb_local_planner/robot_footprint_model.h"
 #include "teb_local_planner/teb_config.h"
 #include "teb_local_planner/visualization.h"
@@ -395,8 +396,11 @@ bool TebOptimalPlanner::buildGraph_temporary(double weight_multiplier, RobotFoot
     AddEdgesObstacles_temporary(weight_multiplier, model2, upper_obstacles_);
   }
 
-  if (cfg_->obstacles.include_dynamic_obstacles)
-    AddEdgesDynamicObstacles();
+  if (cfg_->obstacles.include_dynamic_obstacles){
+    //AddEdgesDynamicObstacles();
+	AddEdgesDynamicObstacles_temporary(weight_multiplier, model, obstacles_);
+	AddEdgesDynamicObstacles_temporary(weight_multiplier, model2, upper_obstacles_);
+  }
 
   AddEdgesViaPoints();
 
@@ -490,7 +494,6 @@ void TebOptimalPlanner::AddTEBVertices()
     (iter_obstacle++)->reserve(obstacles_->size());
   }
 }
-
 
 void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
 {
@@ -822,6 +825,35 @@ void TebOptimalPlanner::AddEdgesDynamicObstacles(double weight_multiplier)
       dynobst_edge->setVertex(0,teb_.PoseVertex(i));
       dynobst_edge->setInformation(information);
       dynobst_edge->setParameters(*cfg_, robot_model_.get(), obst->get());
+      optimizer_->addEdge(dynobst_edge);
+      time += teb_.TimeDiff(i); // we do not need to check the time diff bounds, since we iterate to "< sizePoses()-1".
+    }
+  }
+}
+
+void TebOptimalPlanner::AddEdgesDynamicObstacles_temporary(double weight_multiplier, teb_local_planner::RobotFootprintModelPtr model, ObstContainer* obstacles_in_level)
+{
+  if (cfg_->optim.weight_obstacle==0 || weight_multiplier==0 || obstacles_in_level==NULL )
+    return; // if weight equals zero skip adding edges!
+
+  Eigen::Matrix<double,2,2> information;
+  information(0,0) = cfg_->optim.weight_dynamic_obstacle * weight_multiplier;
+  information(1,1) = cfg_->optim.weight_dynamic_obstacle_inflation;
+  information(0,1) = information(1,0) = 0;
+  
+  for (ObstContainer::const_iterator obst = obstacles_in_level->begin(); obst != obstacles_in_level->end(); ++obst)
+  {
+    if (!(*obst)->isDynamic())
+      continue;
+
+    // Skip first and last pose, as they are fixed
+    double time = teb_.TimeDiff(0);
+    for (int i=1; i < teb_.sizePoses() - 1; ++i)
+    {
+      EdgeDynamicObstacle* dynobst_edge = new EdgeDynamicObstacle(time);
+      dynobst_edge->setVertex(0,teb_.PoseVertex(i));
+      dynobst_edge->setInformation(information);
+      dynobst_edge->setParameters(*cfg_, model.get(), obst->get());
       optimizer_->addEdge(dynobst_edge);
       time += teb_.TimeDiff(i); // we do not need to check the time diff bounds, since we iterate to "< sizePoses()-1".
     }

@@ -572,7 +572,7 @@ protected:
    * @see optimizeGraph
    */
   void AddTEBVertices();
-  
+
   /**
    * @brief Add all edges (local cost functions) for limiting the translational and angular velocity.
    * @see EdgeVelocity
@@ -656,6 +656,8 @@ protected:
 
    */
   void AddEdgesDynamicObstacles(double weight_multiplier=1.0);
+
+  void AddEdgesDynamicObstacles_temporary(double weight_multiplier=1.0, teb_local_planner::RobotFootprintModelPtr model=NULL, ObstContainer* obstacles_in_level=NULL);
 
   /**
    * @brief Add all edges (local cost functions) for satisfying kinematic constraints of a differential drive robot

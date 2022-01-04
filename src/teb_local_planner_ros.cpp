@@ -49,6 +49,7 @@
 // pluginlib macros
 #include <pluginlib/class_list_macros.h>
 
+#include "costmap_2d/costmap_2d_ros.h"
 #include "g2o/core/sparse_optimizer.h"
 #include "g2o/core/block_solver.h"
 #include "g2o/core/factory.h"
@@ -56,6 +57,9 @@
 #include "g2o/core/optimization_algorithm_levenberg.h"
 #include "g2o/solvers/csparse/linear_solver_csparse.h"
 #include "g2o/solvers/cholmod/linear_solver_cholmod.h"
+#include "nav_msgs/OccupancyGrid.h"
+#include "ros/node_handle.h"
+#include "teb_local_planner/obstacles.h"
 
 
 // register this planner both as a BaseLocalPlanner and as a MBF's CostmapController plugin
@@ -193,7 +197,131 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
   }
 }
 
+void TebLocalPlannerROS::initialize_temporary(std::string name, tf2_ros::Buffer* tf, costmap_2d::Costmap2DROS* costmap_ros, costmap_2d::Costmap2DROS* other_costmap_ros)
+{
+  // check if the plugin is already initialized
+  if(!initialized_)
+  {
+    // create Node Handle with name of plugin (as used in move_base for loading)
+    ros::NodeHandle nh("~/" + name);
+    ros::NodeHandle he(nh, "upper_model");
+    // get parameters of TebConfig via the nodehandle and override the default config
+    cfg_.loadRosParamFromNodeHandle(nh);
 
+    // reserve some memory for obstacles
+    obstacles_.reserve(500);
+    upper_obstacles_.reserve(500);
+
+    // create visualization instance
+    visualization_ = TebVisualizationPtr(new TebVisualization(nh, cfg_));
+
+    // create robot footprint/contour model for optimization
+    RobotFootprintModelPtr robot_model = getRobotFootprintFromParamServer(nh);
+    RobotFootprintModelPtr robot_model2 = getRobotFootprintFromParamServer(he);
+
+    // create the planner instance
+    if (cfg_.hcp.enable_homotopy_class_planning)
+    {
+      //planner_ = PlannerInterfacePtr(new HomotopyClassPlanner(cfg_, &obstacles_, robot_model, visualization_, &via_points_));
+      planner_ = PlannerInterfacePtr(new HomotopyClassPlanner(cfg_, &obstacles_, &upper_obstacles_, robot_model, robot_model2, visualization_, &via_points_));
+      ROS_INFO("Parallel planning in distinctive topologies enabled.");
+    }
+    else
+    {
+      planner_ = PlannerInterfacePtr(new TebOptimalPlanner(cfg_, &obstacles_, robot_model, visualization_, &via_points_));
+      ROS_INFO("Parallel planning in distinctive topologies disabled.");
+    }
+
+    // init other variables
+    tf_ = tf;
+    costmap_ros_ = costmap_ros;
+    upper_costmap_ros_ = other_costmap_ros;
+
+    costmap_ = costmap_ros_->getCostmap(); // locking should be done in MoveBase.
+    upper_costmap_ = upper_costmap_ros_->getCostmap();
+
+    costmap_model_ = boost::make_shared<base_local_planner::CostmapModel>(*costmap_);
+
+    global_frame_ = costmap_ros_->getGlobalFrameID();
+    cfg_.map_frame = global_frame_; // TODO
+    robot_base_frame_ = costmap_ros_->getBaseFrameID();
+
+    //Initialize a costmap to polygon converter
+    if (!cfg_.obstacles.costmap_converter_plugin.empty())
+    {
+      try
+      {
+        costmap_converter_ = costmap_converter_loader_.createInstance(cfg_.obstacles.costmap_converter_plugin);
+        upper_costmap_converter_ = costmap_converter_loader_.createInstance(cfg_.obstacles.costmap_converter_plugin);
+
+        std::string converter_name = costmap_converter_loader_.getName(cfg_.obstacles.costmap_converter_plugin);
+        // replace '::' by '/' to convert the c++ namespace to a NodeHandle namespace
+        boost::replace_all(converter_name, "::", "/");
+
+        costmap_converter_->setOdomTopic(cfg_.odom_topic);
+        upper_costmap_converter_->setOdomTopic(cfg_.odom_topic);
+
+        costmap_converter_->initialize(ros::NodeHandle(nh, "costmap_converter/" + converter_name));
+        upper_costmap_converter_->initialize(ros::NodeHandle(nh, "upper_costmap_converter/" + converter_name));
+
+        costmap_converter_->setCostmap2D(costmap_);
+        upper_costmap_converter_->setCostmap2D(upper_costmap_);
+
+        costmap_converter_->startWorker(ros::Rate(cfg_.obstacles.costmap_converter_rate), costmap_, cfg_.obstacles.costmap_converter_spin_thread);
+        upper_costmap_converter_->startWorker(ros::Rate(cfg_.obstacles.costmap_converter_rate), upper_costmap_, cfg_.obstacles.costmap_converter_spin_thread);
+        ROS_INFO_STREAM("Costmap conversion plugin " << cfg_.obstacles.costmap_converter_plugin << " loaded.");
+      }
+      catch(pluginlib::PluginlibException& ex)
+      {
+        ROS_WARN("The specified costmap converter plugin cannot be loaded. All occupied costmap cells are treaten as point obstacles. Error message: %s", ex.what());
+        costmap_converter_.reset();
+        upper_costmap_converter_.reset();
+      }
+    }
+    else
+      ROS_INFO("No costmap conversion plugin specified. All occupied costmap cells are treaten as point obstacles.");
+
+
+    // Get footprint of the robot and minimum and maximum distance from the center of the robot to its footprint vertices.
+    footprint_spec_ = costmap_ros_->getRobotFootprint();
+    costmap_2d::calculateMinAndMaxDistances(footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius);
+
+    // init the odom helper to receive the robot's velocity from odom messages
+    odom_helper_.setOdomTopic(cfg_.odom_topic);
+
+    // setup dynamic reconfigure
+    dynamic_recfg_ = boost::make_shared< dynamic_reconfigure::Server<TebLocalPlannerReconfigureConfig> >(nh);
+    dynamic_reconfigure::Server<TebLocalPlannerReconfigureConfig>::CallbackType cb = boost::bind(&TebLocalPlannerROS::reconfigureCB, this, _1, _2);
+    dynamic_recfg_->setCallback(cb);
+
+    // validate optimization footprint and costmap footprint
+    validateFootprints(robot_model->getInscribedRadius(), robot_inscribed_radius_, cfg_.obstacles.min_obstacle_dist);
+
+    // setup callback for custom obstacles
+    custom_obst_sub_ = nh.subscribe("obstacles", 1, &TebLocalPlannerROS::customObstacleCB, this);
+
+    // setup callback for custom via-points
+    via_points_sub_ = nh.subscribe("via_points", 1, &TebLocalPlannerROS::customViaPointsCB, this);
+
+    // TODO:setup callback for upper_costmap
+    //upper_cost_sub_ = nh.subscribe("upper_costmap", 1, ,this);
+
+    // initialize failure detector
+    ros::NodeHandle nh_move_base("~");
+    double controller_frequency = 5;
+    nh_move_base.param("controller_frequency", controller_frequency, controller_frequency);
+    failure_detector_.setBufferLength(std::round(cfg_.recovery.oscillation_filter_duration*controller_frequency));
+
+    // set initialized flag
+    initialized_ = true;
+
+    ROS_DEBUG("teb_local_planner plugin initialized.");
+  }
+  else
+  {
+    ROS_WARN("teb_local_planner has already been initialized, doing nothing.");
+  }
+}
 
 bool TebLocalPlannerROS::setPlan(const std::vector<geometry_msgs::PoseStamped>& orig_global_plan)
 {
@@ -332,10 +460,14 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
     
   // clear currently existing obstacles
   obstacles_.clear();
-  
+  upper_obstacles_.clear();
+
   // Update obstacle container with costmap information or polygons provided by a costmap_converter plugin
-  if (costmap_converter_)
-    updateObstacleContainerWithCostmapConverter();
+  if (costmap_converter_){
+    //updateObstacleContainerWithCostmapConverter();
+    updateObstacleContainerWithCostmapConverter_temporary(obstacles_, costmap_converter_);
+    updateObstacleContainerWithCostmapConverter_temporary(upper_obstacles_, upper_costmap_converter_);
+  }
   else
     updateObstacleContainerWithCostmap();
   
@@ -523,6 +655,51 @@ void TebLocalPlannerROS::updateObstacleContainerWithCostmapConverter()
   }
 }
 
+void TebLocalPlannerROS::updateObstacleContainerWithCostmapConverter_temporary(ObstContainer obstacles_to_update,
+                                                                               boost::shared_ptr<costmap_converter::BaseCostmapToPolygons> costmap_to_update)
+{
+  if (!costmap_to_update)
+    return;
+
+  //Get obstacles from costmap converter
+  costmap_converter::ObstacleArrayConstPtr obstacles = costmap_to_update->getObstacles();
+  if (!obstacles)
+    return;
+
+  for (std::size_t i=0; i<obstacles->obstacles.size(); ++i)
+  {
+    const costmap_converter::ObstacleMsg* obstacle = &obstacles->obstacles.at(i);
+    const geometry_msgs::Polygon* polygon = &obstacle->polygon;
+
+    if (polygon->points.size()==1 && obstacle->radius > 0) // Circle
+    {
+      obstacles_to_update.push_back(ObstaclePtr(new CircularObstacle(polygon->points[0].x, polygon->points[0].y, obstacle->radius)));
+    }
+    else if (polygon->points.size()==1) // Point
+    {
+      obstacles_to_update.push_back(ObstaclePtr(new PointObstacle(polygon->points[0].x, polygon->points[0].y)));
+    }
+    else if (polygon->points.size()==2) // Line
+    {
+      obstacles_to_update.push_back(ObstaclePtr(new LineObstacle(polygon->points[0].x, polygon->points[0].y,
+                                                        polygon->points[1].x, polygon->points[1].y )));
+    }
+    else if (polygon->points.size()>2) // Real polygon
+    {
+        PolygonObstacle* polyobst = new PolygonObstacle;
+        for (std::size_t j=0; j<polygon->points.size(); ++j)
+        {
+            polyobst->pushBackVertex(polygon->points[j].x, polygon->points[j].y);
+        }
+        polyobst->finalizePolygon();
+        obstacles_to_update.push_back(ObstaclePtr(polyobst));
+    }
+
+    // Set velocity, if obstacle is moving
+    if(!obstacles_to_update.empty())
+      obstacles_to_update.back()->setCentroidVelocity(obstacles->obstacles[i].velocities, obstacles->obstacles[i].orientation);
+  }
+}
 
 void TebLocalPlannerROS::updateObstacleContainerWithCustomObstacles()
 {

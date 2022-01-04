@@ -39,6 +39,7 @@
 #ifndef TEB_LOCAL_PLANNER_ROS_H_
 #define TEB_LOCAL_PLANNER_ROS_H_
 
+#include "ros/subscriber.h"
 #include "teb_local_planner/obstacles.h"
 #include <ros/ros.h>
 
@@ -112,6 +113,8 @@ public:
     * @param costmap_ros Cost map representing occupied and free space
     */
   void initialize(std::string name, tf2_ros::Buffer *tf, costmap_2d::Costmap2DROS* costmap_ros);
+
+  void initialize_temporary(std::string name, tf2_ros::Buffer *tf, costmap_2d::Costmap2DROS* costmap_ros, costmap_2d::Costmap2DROS* other_costmap_ros);
 
   /**
     * @brief Set the plan that the teb local planner is following
@@ -242,6 +245,8 @@ protected:
    * @sa updateObstacleContainerWithCostmap
    */
   void updateObstacleContainerWithCostmapConverter();
+
+  void updateObstacleContainerWithCostmapConverter_temporary(ObstContainer obstacles_to_update, boost::shared_ptr<costmap_converter::BaseCostmapToPolygons> costmap_to_update);
   
   /**
    * @brief Update internal obstacle vector based on custom messages received via subscriber
@@ -396,7 +401,11 @@ private:
 
   // external objects (store weak pointers)
   costmap_2d::Costmap2DROS* costmap_ros_; //!< Pointer to the costmap ros wrapper, received from the navigation stack
+  costmap_2d::Costmap2DROS* upper_costmap_ros_;
+
   costmap_2d::Costmap2D* costmap_; //!< Pointer to the 2d costmap (obtained from the costmap ros wrapper)
+  costmap_2d::Costmap2D* upper_costmap_;
+
   tf2_ros::Buffer* tf_; //!< pointer to tf buffer
     
   // internal objects (memory management owned)
@@ -414,7 +423,8 @@ private:
   base_local_planner::OdometryHelperRos odom_helper_; //!< Provides an interface to receive the current velocity from the robot
   
   pluginlib::ClassLoader<costmap_converter::BaseCostmapToPolygons> costmap_converter_loader_; //!< Load costmap converter plugins at runtime
-  boost::shared_ptr<costmap_converter::BaseCostmapToPolygons> costmap_converter_; //!< Store the current costmap_converter  
+  boost::shared_ptr<costmap_converter::BaseCostmapToPolygons> costmap_converter_; //!< Store the current costmap_converter
+  boost::shared_ptr<costmap_converter::BaseCostmapToPolygons> upper_costmap_converter_;
 
   boost::shared_ptr< dynamic_reconfigure::Server<TebLocalPlannerReconfigureConfig> > dynamic_recfg_; //!< Dynamic reconfigure server to allow config modifications at runtime
   ros::Subscriber custom_obst_sub_; //!< Subscriber for custom obstacles received via a ObstacleMsg.
@@ -422,6 +432,7 @@ private:
   costmap_converter::ObstacleArrayMsg custom_obstacle_msg_; //!< Copy of the most recent obstacle message
 
   ros::Subscriber via_points_sub_; //!< Subscriber for custom via-points received via a Path msg.
+  ros::Subscriber upper_cost_sub_;
   bool custom_via_points_active_; //!< Keep track whether valid via-points have been received from via_points_sub_
   boost::mutex via_point_mutex_; //!< Mutex that locks the via_points container (multi-threaded)
 
