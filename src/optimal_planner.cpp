@@ -603,7 +603,7 @@ void TebOptimalPlanner::AddEdgesObstacles(double weight_multiplier)
 
 void TebOptimalPlanner::AddEdgesObstacles_temporary(double weight_multiplier, teb_local_planner::RobotFootprintModelPtr model, ObstContainer* obstacles_in_level)
 {
-  if (cfg_->optim.weight_obstacle==0 || weight_multiplier==0 || obstacles_==nullptr )
+  if (cfg_->optim.weight_obstacle==0 || weight_multiplier==0 || obstacles_in_level==nullptr )
     return; // if weight equals zero skip adding edges!
 
 

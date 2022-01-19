@@ -72,6 +72,7 @@ namespace teb_local_planner
 
 TebLocalPlannerROS::TebLocalPlannerROS() : costmap_ros_(NULL), tf_(NULL), costmap_model_(NULL),
                                            costmap_converter_loader_("costmap_converter", "costmap_converter::BaseCostmapToPolygons"),
+										   upper_costmap_converter_loader_("costmap_converter", "costmap_converter::BaseCostmapToPolygons"),
                                            dynamic_recfg_(NULL), custom_via_points_active_(false), goal_reached_(false), no_infeasible_plans_(0),
                                            last_preferred_rotdir_(RotType::none), initialized_(false)
 {
@@ -112,8 +113,8 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     // create the planner instance
     if (cfg_.hcp.enable_homotopy_class_planning)
     {
-      //planner_ = PlannerInterfacePtr(new HomotopyClassPlanner(cfg_, &obstacles_, robot_model, visualization_, &via_points_));
-      planner_ = PlannerInterfacePtr(new HomotopyClassPlanner(cfg_, &obstacles_, &upper_obstacles_, robot_model, robot_model2, visualization_, &via_points_));
+      planner_ = PlannerInterfacePtr(new HomotopyClassPlanner(cfg_, &obstacles_, robot_model, visualization_, &via_points_));
+      //planner_ = PlannerInterfacePtr(new HomotopyClassPlanner(cfg_, &obstacles_, &upper_obstacles_, robot_model, robot_model2, visualization_, &via_points_));
       ROS_INFO("Parallel planning in distinctive topologies enabled.");
     }
     else
@@ -205,6 +206,7 @@ void TebLocalPlannerROS::initialize_temporary(std::string name, tf2_ros::Buffer*
     // create Node Handle with name of plugin (as used in move_base for loading)
     ros::NodeHandle nh("~/" + name);
     ros::NodeHandle he(nh, "upper_model");
+
     // get parameters of TebConfig via the nodehandle and override the default config
     cfg_.loadRosParamFromNodeHandle(nh);
 
@@ -214,6 +216,7 @@ void TebLocalPlannerROS::initialize_temporary(std::string name, tf2_ros::Buffer*
 
     // create visualization instance
     visualization_ = TebVisualizationPtr(new TebVisualization(nh, cfg_));
+	upper_visualization_ = TebVisualizationPtr(new TebVisualization(he, cfg_));
 
     // create robot footprint/contour model for optimization
     RobotFootprintModelPtr robot_model = getRobotFootprintFromParamServer(nh);
@@ -241,6 +244,7 @@ void TebLocalPlannerROS::initialize_temporary(std::string name, tf2_ros::Buffer*
     upper_costmap_ = upper_costmap_ros_->getCostmap();
 
     costmap_model_ = boost::make_shared<base_local_planner::CostmapModel>(*costmap_);
+	upper_costmap_model_ = boost::make_shared<base_local_planner::CostmapModel>(*upper_costmap_);
 
     global_frame_ = costmap_ros_->getGlobalFrameID();
     cfg_.map_frame = global_frame_; // TODO
@@ -252,7 +256,7 @@ void TebLocalPlannerROS::initialize_temporary(std::string name, tf2_ros::Buffer*
       try
       {
         costmap_converter_ = costmap_converter_loader_.createInstance(cfg_.obstacles.costmap_converter_plugin);
-        upper_costmap_converter_ = costmap_converter_loader_.createInstance(cfg_.obstacles.costmap_converter_plugin);
+        upper_costmap_converter_ = upper_costmap_converter_loader_.createInstance(cfg_.obstacles.costmap_converter_plugin);
 
         std::string converter_name = costmap_converter_loader_.getName(cfg_.obstacles.costmap_converter_plugin);
         // replace '::' by '/' to convert the c++ namespace to a NodeHandle namespace
@@ -284,7 +288,9 @@ void TebLocalPlannerROS::initialize_temporary(std::string name, tf2_ros::Buffer*
 
     // Get footprint of the robot and minimum and maximum distance from the center of the robot to its footprint vertices.
     footprint_spec_ = costmap_ros_->getRobotFootprint();
+	upper_footprint_spec_ = costmap_ros_->getRobotFootprint();
     costmap_2d::calculateMinAndMaxDistances(footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius);
+	costmap_2d::calculateMinAndMaxDistances(upper_footprint_spec_, upper_robot_inscribed_radius_, upper_robot_circumscribed_radius);
 
     // init the odom helper to receive the robot's velocity from odom messages
     odom_helper_.setOdomTopic(cfg_.odom_topic);
@@ -302,9 +308,6 @@ void TebLocalPlannerROS::initialize_temporary(std::string name, tf2_ros::Buffer*
 
     // setup callback for custom via-points
     via_points_sub_ = nh.subscribe("via_points", 1, &TebLocalPlannerROS::customViaPointsCB, this);
-
-    // TODO:setup callback for upper_costmap
-    //upper_cost_sub_ = nh.subscribe("upper_costmap", 1, ,this);
 
     // initialize failure detector
     ros::NodeHandle nh_move_base("~");
@@ -465,12 +468,15 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   // Update obstacle container with costmap information or polygons provided by a costmap_converter plugin
   if (costmap_converter_){
     //updateObstacleContainerWithCostmapConverter();
-    updateObstacleContainerWithCostmapConverter_temporary(obstacles_, costmap_converter_);
-    updateObstacleContainerWithCostmapConverter_temporary(upper_obstacles_, upper_costmap_converter_);
+    updateObstacleContainerWithCostmapConverter_temporary(&obstacles_, costmap_converter_);
+    updateObstacleContainerWithCostmapConverter_temporary(&upper_obstacles_, upper_costmap_converter_);
   }
-  else
-    updateObstacleContainerWithCostmap();
-  
+  else{
+    //updateObstacleContainerWithCostmap();
+	updateObstacleContainerWithCostmap_temporary(&obstacles_, costmap_);
+	updateObstacleContainerWithCostmap_temporary(&upper_obstacles_, upper_costmap_);
+  }
+    
   // also consider custom obstacles (must be called after other updates, since the container is not cleared)
   updateObstacleContainerWithCustomObstacles();
   
@@ -498,10 +504,13 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   {
     // Update footprint of the robot and minimum and maximum distance from the center of the robot to its footprint vertices.
     footprint_spec_ = costmap_ros_->getRobotFootprint();
+	upper_footprint_spec_ = costmap_ros_->getRobotFootprint();
     costmap_2d::calculateMinAndMaxDistances(footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius);
+	costmap_2d::calculateMinAndMaxDistances(upper_footprint_spec_, upper_robot_inscribed_radius_, upper_robot_circumscribed_radius);
   }
 
-  bool feasible = planner_->isTrajectoryFeasible(costmap_model_.get(), footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius, cfg_.trajectory.feasibility_check_no_poses, cfg_.trajectory.feasibility_check_lookahead_distance);
+  bool feasible = planner_->isTrajectoryFeasible(costmap_model_.get(), footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius, cfg_.trajectory.feasibility_check_no_poses, cfg_.trajectory.feasibility_check_lookahead_distance) &&
+				  planner_->isTrajectoryFeasible(upper_costmap_model_.get(), upper_footprint_spec_, upper_robot_inscribed_radius_, upper_robot_circumscribed_radius, cfg_.trajectory.feasibility_check_no_poses, cfg_.trajectory.feasibility_check_lookahead_distance);
   if (!feasible)
   {
     cmd_vel.twist.linear.x = cmd_vel.twist.linear.y = cmd_vel.twist.angular.z = 0;
@@ -563,6 +572,7 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   // Now visualize everything    
   planner_->visualize();
   visualization_->publishObstacles(obstacles_);
+  upper_visualization_->publishObstacles(upper_obstacles_);
   visualization_->publishViaPoints(via_points_);
   visualization_->publishGlobalPlan(global_plan_);
   return mbf_msgs::ExePathResult::SUCCESS;
@@ -604,6 +614,33 @@ void TebLocalPlannerROS::updateObstacleContainerWithCostmap()
             continue;
             
           obstacles_.push_back(ObstaclePtr(new PointObstacle(obs)));
+        }
+      }
+    }
+  }
+}
+
+void TebLocalPlannerROS::updateObstacleContainerWithCostmap_temporary(teb_local_planner::ObstContainer* obstacles_to_update, costmap_2d::Costmap2D* costmap_to_update){  
+  // Add costmap obstacles if desired
+  if (cfg_.obstacles.include_costmap_obstacles)
+  {
+    Eigen::Vector2d robot_orient = robot_pose_.orientationUnitVec();
+    
+    for (unsigned int i=0; i<costmap_to_update->getSizeInCellsX()-1; ++i)
+    {
+      for (unsigned int j=0; j<costmap_to_update->getSizeInCellsY()-1; ++j)
+      {
+        if (costmap_to_update->getCost(i,j) == costmap_2d::LETHAL_OBSTACLE)
+        {
+          Eigen::Vector2d obs;
+          costmap_to_update->mapToWorld(i,j,obs.coeffRef(0), obs.coeffRef(1));
+            
+          // check if obstacle is interesting (e.g. not far behind the robot)
+          Eigen::Vector2d obs_dir = obs-robot_pose_.position();
+          if ( obs_dir.dot(robot_orient) < 0 && obs_dir.norm() > cfg_.obstacles.costmap_obstacles_behind_robot_dist  )
+            continue;
+            
+          obstacles_to_update->push_back(ObstaclePtr(new PointObstacle(obs)));
         }
       }
     }
@@ -655,7 +692,7 @@ void TebLocalPlannerROS::updateObstacleContainerWithCostmapConverter()
   }
 }
 
-void TebLocalPlannerROS::updateObstacleContainerWithCostmapConverter_temporary(ObstContainer obstacles_to_update,
+void TebLocalPlannerROS::updateObstacleContainerWithCostmapConverter_temporary(ObstContainer* obstacles_to_update,
                                                                                boost::shared_ptr<costmap_converter::BaseCostmapToPolygons> costmap_to_update)
 {
   if (!costmap_to_update)
@@ -673,15 +710,15 @@ void TebLocalPlannerROS::updateObstacleContainerWithCostmapConverter_temporary(O
 
     if (polygon->points.size()==1 && obstacle->radius > 0) // Circle
     {
-      obstacles_to_update.push_back(ObstaclePtr(new CircularObstacle(polygon->points[0].x, polygon->points[0].y, obstacle->radius)));
+      obstacles_to_update->push_back(ObstaclePtr(new CircularObstacle(polygon->points[0].x, polygon->points[0].y, obstacle->radius)));
     }
     else if (polygon->points.size()==1) // Point
     {
-      obstacles_to_update.push_back(ObstaclePtr(new PointObstacle(polygon->points[0].x, polygon->points[0].y)));
+      obstacles_to_update->push_back(ObstaclePtr(new PointObstacle(polygon->points[0].x, polygon->points[0].y)));
     }
     else if (polygon->points.size()==2) // Line
     {
-      obstacles_to_update.push_back(ObstaclePtr(new LineObstacle(polygon->points[0].x, polygon->points[0].y,
+      obstacles_to_update->push_back(ObstaclePtr(new LineObstacle(polygon->points[0].x, polygon->points[0].y,
                                                         polygon->points[1].x, polygon->points[1].y )));
     }
     else if (polygon->points.size()>2) // Real polygon
@@ -692,12 +729,12 @@ void TebLocalPlannerROS::updateObstacleContainerWithCostmapConverter_temporary(O
             polyobst->pushBackVertex(polygon->points[j].x, polygon->points[j].y);
         }
         polyobst->finalizePolygon();
-        obstacles_to_update.push_back(ObstaclePtr(polyobst));
+        obstacles_to_update->push_back(ObstaclePtr(polyobst));
     }
 
     // Set velocity, if obstacle is moving
-    if(!obstacles_to_update.empty())
-      obstacles_to_update.back()->setCentroidVelocity(obstacles->obstacles[i].velocities, obstacles->obstacles[i].orientation);
+    if(!obstacles_to_update->empty())
+      obstacles_to_update->back()->setCentroidVelocity(obstacles->obstacles[i].velocities, obstacles->obstacles[i].orientation);
   }
 }
 

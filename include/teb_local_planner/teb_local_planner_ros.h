@@ -237,6 +237,8 @@ protected:
     * @todo Include properties for dynamic obstacles (e.g. using constant velocity model)
     */
   void updateObstacleContainerWithCostmap();
+
+  void updateObstacleContainerWithCostmap_temporary(ObstContainer* obstacles_to_update, costmap_2d::Costmap2D* costmap_to_update);
   
   /**
    * @brief Update internal obstacle vector based on polygons provided by a costmap_converter plugin
@@ -246,7 +248,7 @@ protected:
    */
   void updateObstacleContainerWithCostmapConverter();
 
-  void updateObstacleContainerWithCostmapConverter_temporary(ObstContainer obstacles_to_update, boost::shared_ptr<costmap_converter::BaseCostmapToPolygons> costmap_to_update);
+  void updateObstacleContainerWithCostmapConverter_temporary(ObstContainer* obstacles_to_update, boost::shared_ptr<costmap_converter::BaseCostmapToPolygons> costmap_to_update);
   
   /**
    * @brief Update internal obstacle vector based on custom messages received via subscriber
@@ -414,7 +416,9 @@ private:
   ObstContainer upper_obstacles_;
   ViaPointContainer via_points_; //!< Container of via-points that should be considered during local trajectory optimization
   TebVisualizationPtr visualization_; //!< Instance of the visualization class (local/global plan, obstacles, ...)
-  boost::shared_ptr<base_local_planner::CostmapModel> costmap_model_;  
+  TebVisualizationPtr upper_visualization_;
+  boost::shared_ptr<base_local_planner::CostmapModel> costmap_model_;
+  boost::shared_ptr<base_local_planner::CostmapModel> upper_costmap_model_;
   TebConfig cfg_; //!< Config class that stores and manages all related parameters
   FailureDetector failure_detector_; //!< Detect if the robot got stucked
   
@@ -423,6 +427,7 @@ private:
   base_local_planner::OdometryHelperRos odom_helper_; //!< Provides an interface to receive the current velocity from the robot
   
   pluginlib::ClassLoader<costmap_converter::BaseCostmapToPolygons> costmap_converter_loader_; //!< Load costmap converter plugins at runtime
+  pluginlib::ClassLoader<costmap_converter::BaseCostmapToPolygons> upper_costmap_converter_loader_;
   boost::shared_ptr<costmap_converter::BaseCostmapToPolygons> costmap_converter_; //!< Store the current costmap_converter
   boost::shared_ptr<costmap_converter::BaseCostmapToPolygons> upper_costmap_converter_;
 
@@ -446,9 +451,12 @@ private:
   RotType last_preferred_rotdir_; //!< Store recent preferred turning direction
   geometry_msgs::Twist last_cmd_; //!< Store the last control command generated in computeVelocityCommands()
   
-  std::vector<geometry_msgs::Point> footprint_spec_; //!< Store the footprint of the robot 
+  std::vector<geometry_msgs::Point> footprint_spec_; //!< Store the footprint of the robot
+  std::vector<geometry_msgs::Point> upper_footprint_spec_; //!< Store the upper footprint of the robot
   double robot_inscribed_radius_; //!< The radius of the inscribed circle of the robot (collision possible)
+  double upper_robot_inscribed_radius_;
   double robot_circumscribed_radius; //!< The radius of the circumscribed circle of the robot
+  double upper_robot_circumscribed_radius;
   
   std::string global_frame_; //!< The frame in which the controller will run
   std::string robot_base_frame_; //!< Used as the base frame id of the robot
