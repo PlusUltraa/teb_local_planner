@@ -288,9 +288,9 @@ void TebLocalPlannerROS::initialize_temporary(std::string name, tf2_ros::Buffer*
 
     // Get footprint of the robot and minimum and maximum distance from the center of the robot to its footprint vertices.
     footprint_spec_ = costmap_ros_->getRobotFootprint();
-	upper_footprint_spec_ = costmap_ros_->getRobotFootprint();
+	  upper_footprint_spec_ = upper_costmap_ros_->getRobotFootprint();
     costmap_2d::calculateMinAndMaxDistances(footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius);
-	costmap_2d::calculateMinAndMaxDistances(upper_footprint_spec_, upper_robot_inscribed_radius_, upper_robot_circumscribed_radius);
+	  costmap_2d::calculateMinAndMaxDistances(upper_footprint_spec_, upper_robot_inscribed_radius_, upper_robot_circumscribed_radius);
 
     // init the odom helper to receive the robot's velocity from odom messages
     odom_helper_.setOdomTopic(cfg_.odom_topic);
@@ -476,11 +476,14 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
 	updateObstacleContainerWithCostmap_temporary(&obstacles_, costmap_);
 	updateObstacleContainerWithCostmap_temporary(&upper_obstacles_, upper_costmap_);
   }
-    
+
   // also consider custom obstacles (must be called after other updates, since the container is not cleared)
   updateObstacleContainerWithCustomObstacles();
-  
-    
+
+  /*for(auto obst : upper_obstacles_){
+		ROS_WARN_STREAM("obstacles: " << obst->getCentroid());
+  }*/
+
   // Do not allow config changes during the following optimization step
   boost::mutex::scoped_lock cfg_lock(cfg_.configMutex());
     
@@ -504,13 +507,15 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
   {
     // Update footprint of the robot and minimum and maximum distance from the center of the robot to its footprint vertices.
     footprint_spec_ = costmap_ros_->getRobotFootprint();
-	upper_footprint_spec_ = costmap_ros_->getRobotFootprint();
+	  upper_footprint_spec_ = upper_costmap_ros_->getRobotFootprint();
+
     costmap_2d::calculateMinAndMaxDistances(footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius);
-	costmap_2d::calculateMinAndMaxDistances(upper_footprint_spec_, upper_robot_inscribed_radius_, upper_robot_circumscribed_radius);
+	  costmap_2d::calculateMinAndMaxDistances(upper_footprint_spec_, upper_robot_inscribed_radius_, upper_robot_circumscribed_radius);
   }
 
   bool feasible = planner_->isTrajectoryFeasible(costmap_model_.get(), footprint_spec_, robot_inscribed_radius_, robot_circumscribed_radius, cfg_.trajectory.feasibility_check_no_poses, cfg_.trajectory.feasibility_check_lookahead_distance) &&
-				  planner_->isTrajectoryFeasible(upper_costmap_model_.get(), upper_footprint_spec_, upper_robot_inscribed_radius_, upper_robot_circumscribed_radius, cfg_.trajectory.feasibility_check_no_poses, cfg_.trajectory.feasibility_check_lookahead_distance);
+				          planner_->isTrajectoryFeasible(upper_costmap_model_.get(), upper_footprint_spec_, upper_robot_inscribed_radius_, upper_robot_circumscribed_radius, cfg_.trajectory.feasibility_check_no_poses, cfg_.trajectory.feasibility_check_lookahead_distance);
+
   if (!feasible)
   {
     cmd_vel.twist.linear.x = cmd_vel.twist.linear.y = cmd_vel.twist.angular.z = 0;
